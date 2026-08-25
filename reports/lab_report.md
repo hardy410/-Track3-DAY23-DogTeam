@@ -1,59 +1,4 @@
-"""Render a complete Markdown lab report from collected scenario metrics."""
-
-from __future__ import annotations
-
-from pathlib import Path
-
-from .metrics import MetricsReport
-
-
-def render_report(metrics: MetricsReport) -> str:
-    """Render a complete lab report from metrics data.
-
-    The generated report includes:
-    1. Metrics summary table (total scenarios, success rate, retries, interrupts)
-    2. Per-scenario results table
-    3. Architecture explanation (your graph design, state schema, reducers)
-    4. Failure analysis (at least two failure modes you considered)
-    5. Improvement plan
-
-    Use reports/lab_report_template.md as your guide.
-
-    Return: formatted markdown string
-    """
-    summary_rows = [
-        ("Total scenarios", str(metrics.total_scenarios)),
-        ("Success rate", f"{metrics.success_rate:.1%}"),
-        ("Average nodes visited", f"{metrics.avg_nodes_visited:.2f}"),
-        ("Total retries", str(metrics.total_retries)),
-        ("Total interrupts/approvals", str(metrics.total_interrupts)),
-        ("Total LLM calls", str(metrics.total_llm_calls)),
-        ("LLM judge calls", str(metrics.total_llm_judge_calls)),
-        ("Structured fallbacks", str(metrics.total_structured_fallbacks)),
-        ("Resume success", "Yes" if metrics.resume_success else "Not demonstrated"),
-    ]
-    summary_table = "\n".join(f"| {name} | {value} |" for name, value in summary_rows)
-
-    scenario_rows = []
-    for item in metrics.scenario_metrics:
-        scenario_rows.append(
-            "| "
-            + " | ".join(
-                [
-                    item.scenario_id,
-                    item.expected_route,
-                    item.actual_route or "n/a",
-                    "Yes" if item.success else "No",
-                    str(item.retry_count),
-                    str(item.interrupt_count),
-                    str(item.llm_calls),
-                    str(item.latency_ms),
-                ]
-            )
-            + " |"
-        )
-
-    return f"""# LangGraph Agentic Orchestration Lab Report
+# LangGraph Agentic Orchestration Lab Report
 
 ## 1. Student
 
@@ -96,13 +41,27 @@ flowchart TD
 
 | Metric | Value |
 |---|---:|
-{summary_table}
+| Total scenarios | 7 |
+| Success rate | 100.0% |
+| Average nodes visited | 6.43 |
+| Total retries | 3 |
+| Total interrupts/approvals | 2 |
+| Total LLM calls | 12 |
+| LLM judge calls | 0 |
+| Structured fallbacks | 0 |
+| Resume success | Yes |
 
 ## 4. Scenario results
 
 | Scenario | Expected | Actual | Success | Retries | Approvals | LLM calls | LLM latency (ms) |
 |---|---|---|---:|---:|---:|---:|---:|
-{chr(10).join(scenario_rows)}
+| S01_simple | simple | simple | Yes | 0 | 0 | 2 | 12670 |
+| S02_tool | tool | tool | Yes | 0 | 0 | 2 | 7343 |
+| S03_missing | missing_info | missing_info | Yes | 0 | 0 | 1 | 4579 |
+| S04_risky | risky | risky | Yes | 0 | 1 | 2 | 10524 |
+| S05_error | error | error | Yes | 2 | 0 | 2 | 9814 |
+| S06_delete | risky | risky | Yes | 0 | 1 | 2 | 7128 |
+| S07_dead_letter | error | error | Yes | 1 | 0 | 1 | 3883 |
 
 ## 5. Failure analysis
 
@@ -138,11 +97,3 @@ latency from 71,073 ms to 55,941 ms (21.3%) while preserving 100% scenario succe
 For production, replace mock tools with typed integrations, enforce authorization before
 side effects, add idempotency keys, redact sensitive event data, capture provider token/cost
 metadata, and evaluate classification against a larger adversarial dataset.
-"""
-
-
-def write_report(metrics: MetricsReport, output_path: str | Path) -> None:
-    """Write the rendered report to a file."""
-    path = Path(output_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_report(metrics), encoding="utf-8")

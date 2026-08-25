@@ -209,7 +209,32 @@ Pick one or more:
 | `make typecheck` | Run mypy type checker |
 | `make run-scenarios` | Execute all scenarios → `outputs/metrics.json` |
 | `make grade-local` | Validate metrics.json schema |
+| `make ui` | Launch the Streamlit live-demo dashboard |
 | `make clean` | Remove caches and generated files |
+
+## Live-demo UI
+
+The Streamlit dashboard exposes the completed lab as an interactive demo:
+
+- Run preset or custom support tickets and inspect the selected route.
+- Pause risky actions with a real LangGraph interrupt, then approve or reject and resume.
+- Inspect node events, latency, LLM calls, tool results, errors, state, and messages.
+- Watch the executed graph path highlight live and replay it step by step.
+- Read SQLite checkpoint history for the active thread.
+- Run all seven sample scenarios and download generated metrics/report artifacts.
+- Present the graph architecture, conditional routes, reducers, retry, and HITL paths.
+
+```bash
+conda activate langgraph-day23
+make ui
+```
+
+On Windows without `make`:
+
+```powershell
+conda activate langgraph-day23
+streamlit run src/langgraph_agent_lab/ui.py
+```
 
 ---
 

@@ -7,7 +7,10 @@ def test_metric_from_state_success():
         "scenario_id": "S",
         "route": "simple",
         "final_answer": "ok",
-        "events": [make_event("intake", "completed", "ok"), make_event("answer", "completed", "ok")],
+        "events": [
+            make_event("intake", "completed", "ok"),
+            make_event("answer", "completed", "ok"),
+        ],
         "errors": [],
         "approval": None,
     }
@@ -31,15 +34,61 @@ def test_metric_from_state_route_mismatch():
 
 def test_summarize_metrics():
     m1 = metric_from_state(
-        {"scenario_id": "1", "route": "simple", "final_answer": "ok", "events": [], "errors": [], "approval": None},
+        {
+            "scenario_id": "1",
+            "route": "simple",
+            "final_answer": "ok",
+            "events": [],
+            "errors": [],
+            "approval": None,
+        },
         "simple",
         False,
     )
     m2 = metric_from_state(
-        {"scenario_id": "2", "route": "tool", "final_answer": None, "events": [], "errors": [], "approval": None},
+        {
+            "scenario_id": "2",
+            "route": "tool",
+            "final_answer": None,
+            "events": [],
+            "errors": [],
+            "approval": None,
+        },
         "tool",
         False,
     )
     report = summarize_metrics([m1, m2])
     assert report.total_scenarios == 2
     assert 0 <= report.success_rate <= 1
+
+
+def test_recoverable_error_route_rejects_unexpected_dead_letter():
+    state = {
+        "scenario_id": "recoverable",
+        "route": "error",
+        "max_attempts": 3,
+        "final_answer": "escalated",
+        "events": [make_event("dead_letter", "failed", "exhausted")],
+        "errors": [],
+        "approval": None,
+    }
+
+    metric = metric_from_state(state, expected_route="error", approval_required=False)
+
+    assert metric.success is False
+
+
+def test_single_attempt_error_accepts_expected_dead_letter():
+    state = {
+        "scenario_id": "dead-letter",
+        "route": "error",
+        "max_attempts": 1,
+        "final_answer": "escalated",
+        "events": [make_event("dead_letter", "failed", "exhausted")],
+        "errors": [],
+        "approval": None,
+    }
+
+    metric = metric_from_state(state, expected_route="error", approval_required=False)
+
+    assert metric.success is True

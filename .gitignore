@@ -25,6 +25,8 @@ env/
 checkpoints.db
 checkpoints.db-wal
 checkpoints.db-shm
+outputs/checkpoints.db*
+outputs/ui_checkpoints.db*
 
 # Testing
 .pytest_cache/

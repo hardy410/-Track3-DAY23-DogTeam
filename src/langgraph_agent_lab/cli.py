@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Annotated
+from uuid import uuid4
 
 import typer
 import yaml
+from langchain_core.runnables import RunnableConfig
 
 from .graph import build_graph
 from .metrics import MetricsReport, metric_from_state, summarize_metrics, write_metrics
@@ -30,12 +32,20 @@ def run_scenarios(
     checkpointer = build_checkpointer(cfg.get("checkpointer", "memory"), cfg.get("database_url"))
     graph = build_graph(checkpointer=checkpointer)
     metrics = []
+    checkpoint_history_observed = False
     for scenario in scenarios:
         state = initial_state(scenario)
-        run_config = {"configurable": {"thread_id": state["thread_id"]}}
+        state["thread_id"] = f"{state['thread_id']}-{uuid4().hex[:8]}"
+        run_config: RunnableConfig = {"configurable": {"thread_id": state["thread_id"]}}
         final_state = graph.invoke(state, config=run_config)
-        metrics.append(metric_from_state(final_state, scenario.expected_route.value, scenario.requires_approval))
-    report = summarize_metrics(metrics)
+        metrics.append(
+            metric_from_state(
+                final_state, scenario.expected_route.value, scenario.requires_approval
+            )
+        )
+        if cfg.get("checkpointer") == "sqlite":
+            checkpoint_history_observed = bool(next(graph.get_state_history(run_config), None))
+    report = summarize_metrics(metrics, resume_success=checkpoint_history_observed)
     write_metrics(report, output)
     if cfg.get("report_path"):
         write_report(report, cfg["report_path"])

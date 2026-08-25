@@ -1,3 +1,4 @@
 scenarios_path: data/sample/scenarios.jsonl
-checkpointer: memory
+checkpointer: sqlite
+database_url: outputs/checkpoints.db
 report_path: reports/lab_report.md
