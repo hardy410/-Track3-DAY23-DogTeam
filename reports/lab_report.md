@@ -30,10 +30,13 @@ flowchart TD
     approval -->|rejected| clarify
     evaluate -->|success| answer
     evaluate -->|needs retry| retry
+    evaluate -->|missing info| clarify
     retry -->|within budget| tool
     retry -->|exhausted| dead_letter
     answer --> finalize
-    clarify --> finalize
+    clarify --> wait_for_user
+    wait_for_user -->|customer replied| classify
+    wait_for_user -->|batch mode| finalize
     dead_letter --> finalize --> END
 ```
 
@@ -41,12 +44,12 @@ flowchart TD
 
 | Metric | Value |
 |---|---:|
-| Total scenarios | 7 |
+| Total scenarios | 8 |
 | Success rate | 100.0% |
-| Average nodes visited | 6.43 |
+| Average nodes visited | 6.62 |
 | Total retries | 3 |
 | Total interrupts/approvals | 2 |
-| Total LLM calls | 12 |
+| Total LLM calls | 15 |
 | LLM judge calls | 0 |
 | Structured fallbacks | 0 |
 | Resume success | Yes |
@@ -55,13 +58,14 @@ flowchart TD
 
 | Scenario | Expected | Actual | Success | Retries | Approvals | LLM calls | LLM latency (ms) |
 |---|---|---|---:|---:|---:|---:|---:|
-| S01_simple | simple | simple | Yes | 0 | 0 | 2 | 12670 |
-| S02_tool | tool | tool | Yes | 0 | 0 | 2 | 7343 |
-| S03_missing | missing_info | missing_info | Yes | 0 | 0 | 1 | 4579 |
-| S04_risky | risky | risky | Yes | 0 | 1 | 2 | 10524 |
-| S05_error | error | error | Yes | 2 | 0 | 2 | 9814 |
-| S06_delete | risky | risky | Yes | 0 | 1 | 2 | 7128 |
-| S07_dead_letter | error | error | Yes | 1 | 0 | 1 | 3883 |
+| S01_simple | simple | simple | Yes | 0 | 0 | 2 | 18240 |
+| S02_tool | tool | tool | Yes | 0 | 0 | 2 | 11714 |
+| S03_missing | missing_info | missing_info | Yes | 0 | 0 | 1 | 3755 |
+| S04_risky | risky | risky | Yes | 0 | 1 | 2 | 13701 |
+| S05_retry | tool | tool | Yes | 2 | 0 | 2 | 6859 |
+| S06_delete | risky | risky | Yes | 0 | 1 | 4 | 14352 |
+| S07_dead_letter | error | error | Yes | 1 | 0 | 1 | 4677 |
+| S08_tracking_clarification | missing_info | missing_info | Yes | 0 | 0 | 1 | 4942 |
 
 ## 5. Failure analysis
 

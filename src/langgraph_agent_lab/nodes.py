@@ -21,6 +21,12 @@ from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, Field, ValidationError
 
 from .llm import get_llm, invoke_with_retry
+from .mock_tools import (
+    extract_order_id,
+    format_tracking_result,
+    is_order_lookup_without_id,
+    lookup_order,
+)
 from .prompts import PROMPT_VERSION, answer_prompt, classification_prompt, evaluation_prompt
 from .state import AgentState, ApprovalDecision, Route, make_event
 
@@ -37,7 +43,7 @@ class ClassificationResult(BaseModel):
 class EvaluationResult(BaseModel):
     """Validated LLM-as-judge output for a mock tool result."""
 
-    evaluation_result: Literal["success", "needs_retry"]
+    evaluation_result: Literal["success", "needs_retry", "missing_info"]
     reasoning: str = Field(description="Brief quality assessment")
 
 
@@ -94,9 +100,15 @@ def _invoke_structured(schema: type[ModelT], prompt: str) -> tuple[ModelT, int, 
     return _parse_json_model(schema, _message_text(raw_response)), calls + 1, True
 
 
-def _heuristic_tool_evaluation(tool_result: str) -> Literal["success", "needs_retry"] | None:
+def _heuristic_tool_evaluation(
+    tool_result: str,
+) -> Literal["success", "needs_retry", "missing_info"] | None:
     """Resolve explicit mock-tool outcomes without spending an LLM call."""
     normalized = tool_result.strip().upper()
+    if normalized.startswith("NEEDS_INFO:"):
+        return "missing_info"
+    if normalized.startswith("NOT_FOUND:"):
+        return "success"
     if normalized.startswith("SUCCESS:"):
         return "success"
     if normalized.startswith("ERROR:"):
@@ -117,7 +129,7 @@ def intake_node(state: AgentState) -> dict:
     return {
         "query": query,
         "messages": [f"intake:{query[:40]}"],
-        "events": [make_event("intake", "completed", "query normalized")],
+        "events": [make_event("intake", "completed", "Đã chuẩn hóa yêu cầu đầu vào")],
     }
 
 
@@ -144,17 +156,27 @@ def classify_node(state: AgentState) -> dict:
     started = perf_counter()
     result, llm_calls, structured_fallback = _invoke_structured(ClassificationResult, prompt)
     latency_ms = int((perf_counter() - started) * 1000)
-    risk_level = "high" if result.route == Route.RISKY.value else "low"
+    llm_route = result.route
+    route = result.route
+    policy_override = False
+    reasoning = result.reasoning
+    if route == Route.TOOL.value and is_order_lookup_without_id(state.get("query", "")):
+        route = Route.MISSING_INFO.value
+        policy_override = True
+        reasoning = f"{reasoning}; cần mã đơn hàng trước khi gọi công cụ"
+    risk_level = "high" if route == Route.RISKY.value else "low"
     return {
-        "route": result.route,
+        "route": route,
         "risk_level": risk_level,
         "events": [
             make_event(
                 "classify",
                 "completed",
-                f"classified as {result.route}",
+                f"Đã phân loại vào route {route}",
                 latency_ms=latency_ms,
-                reasoning=result.reasoning,
+                reasoning=reasoning,
+                llm_route=llm_route,
+                policy_override=policy_override,
                 llm_calls=llm_calls,
                 prompt_version=PROMPT_VERSION,
                 structured_fallback=structured_fallback,
@@ -166,11 +188,11 @@ def classify_node(state: AgentState) -> dict:
 def tool_node(state: AgentState) -> dict:
     """Execute a mock tool call.
 
-    Simulate transient failures for error-route scenarios to test retry loops.
+    Simulate transient tool failures independently from the customer's intent.
 
     Requirements:
     - Read current attempt count from state
-    - If route is "error" and attempt < 2: return error result (string containing "ERROR")
+    - If the scenario enables retry and attempt < 2: return an explicit timeout
     - Otherwise: return a mock success result string
     - Append result to tool_results list
 
@@ -179,19 +201,34 @@ def tool_node(state: AgentState) -> dict:
     route = state.get("route", "")
     attempt = state.get("attempt", 0)
     query = state.get("query", "")
-    if route == Route.ERROR.value and attempt < 2:
-        result = f"ERROR: transient support service failure on attempt {attempt}"
+    should_retry = state.get("should_retry", route == Route.ERROR.value)
+    call_number = attempt + 1
+    if should_retry and attempt < 2:
+        result = (
+            f"ERROR: lần gọi công cụ {call_number} bị timeout; "
+            "dịch vụ vận chuyển chưa phản hồi"
+        )
         event_type = "failed"
     elif route == Route.RISKY.value:
         action = state.get("proposed_action") or query
-        result = f"SUCCESS: approved action completed safely: {action}"
+        result = f"SUCCESS: hành động đã duyệt được thực hiện an toàn: {action}"
         event_type = "completed"
     else:
-        result = f"SUCCESS: mock support lookup completed for: {query}"
-        event_type = "completed"
+        order = lookup_order(query)
+        if order is None:
+            requested_id = extract_order_id(query)
+            result = (
+                f"NOT_FOUND: không tìm thấy đơn hàng #{requested_id} trong mock_orders.json"
+                if requested_id
+                else "NEEDS_INFO: cần mã đơn hàng để thực hiện tra cứu chính xác"
+            )
+            event_type = "completed" if requested_id else "needs_info"
+        else:
+            result = format_tracking_result(order)
+            event_type = "completed"
     return {
         "tool_results": [result],
-        "events": [make_event("tool", event_type, result, attempt=attempt)],
+        "events": [make_event("tool", event_type, result, attempt=attempt, call=call_number)],
     }
 
 
@@ -246,7 +283,7 @@ def evaluate_node(state: AgentState) -> dict:
             make_event(
                 "evaluate",
                 "completed",
-                f"tool result is {evaluation_result}",
+                f"Kết quả công cụ được đánh giá là {evaluation_result}",
                 latency_ms=latency_ms,
                 reasoning=reasoning,
                 evaluation_mode=evaluation_mode,
@@ -292,7 +329,7 @@ def answer_node(state: AgentState) -> dict:
             make_event(
                 "answer",
                 "completed",
-                "grounded answer generated",
+                "Đã tạo câu trả lời bám sát dữ liệu",
                 latency_ms=latency_ms,
                 llm_calls=llm_calls,
                 prompt_version=PROMPT_VERSION,
@@ -310,20 +347,75 @@ def ask_clarification_node(state: AgentState) -> dict:
 
     Return: {"pending_question": str, "final_answer": str, "events": [make_event(...)]}
     """
-    query = state.get("query", "")
     approval = state.get("approval")
     if approval and not approval.get("approved", False):
-        question = "The proposed action was not approved. What safer alternative should I take?"
+        question = "Hành động không được duyệt. Tôi nên thực hiện phương án nào an toàn hơn?"
     else:
         question = (
-            f"Could you provide the affected account, order, or error details for “{query}” "
-            "so I can help without guessing?"
+            "Mình giúp được nhé. Bạn cho mình biết cụ thể vấn đề đang gặp và thông tin liên quan "
+            "(ví dụ mã đơn hàng hoặc email tài khoản) được không?"
         )
     return {
         "pending_question": question,
         "final_answer": question,
+        "clarification_received": False,
         "messages": [f"assistant:{question}"],
-        "events": [make_event("clarify", "completed", "clarification requested")],
+        "events": [make_event("clarify", "completed", "Đã yêu cầu bổ sung thông tin")],
+    }
+
+
+def wait_for_user_node(state: AgentState) -> dict:
+    """Pause an interactive chat and merge the user's reply into the same request.
+
+    Batch evaluation remains deterministic: when interactive clarification is disabled,
+    the graph simply finalizes with the clarification question as before.
+    """
+    if os.getenv("LANGGRAPH_CLARIFY_INTERRUPT", "false").lower() not in {"1", "true", "yes"}:
+        return {
+            "clarification_received": False,
+            "events": [
+                make_event(
+                    "wait_for_user",
+                    "skipped",
+                    "Chế độ batch ghi nhận câu hỏi nhưng không chờ phản hồi trực tiếp",
+                )
+            ],
+        }
+
+    from langgraph.types import interrupt
+
+    resumed = interrupt(
+        {
+            "kind": "clarification",
+            "question": state.get("pending_question", "Bạn có thể nói rõ hơn không?"),
+        }
+    )
+    if isinstance(resumed, dict):
+        reply = str(resumed.get("answer", "")).strip()
+    else:
+        reply = str(resumed).strip()
+    if not reply:
+        return {
+            "clarification_received": False,
+            "events": [make_event("wait_for_user", "empty", "Chưa nhận được thông tin bổ sung")],
+        }
+
+    original_query = state.get("query", "").strip()
+    combined_query = f"{original_query}\nThông tin người dùng bổ sung: {reply}"
+    return {
+        "query": combined_query,
+        "route": "",
+        "pending_question": None,
+        "final_answer": None,
+        "clarification_received": True,
+        "messages": [f"user:{reply}"],
+        "events": [
+            make_event(
+                "wait_for_user",
+                "resumed",
+                "Đã nhận thông tin bổ sung và chuyển lại cho bộ định tuyến",
+            )
+        ],
     }
 
 
@@ -337,7 +429,7 @@ def risky_action_node(state: AgentState) -> dict:
     Return: {"proposed_action": str, "events": [make_event(...)]}
     """
     proposed_action = (
-        f"Execute the requested side-effecting operation after approval: {state.get('query', '')}"
+        f"Thực hiện hành động có tác động thật sau khi được duyệt: {state.get('query', '')}"
     )
     return {
         "proposed_action": proposed_action,
@@ -345,7 +437,7 @@ def risky_action_node(state: AgentState) -> dict:
             make_event(
                 "risky_action",
                 "approval_required",
-                "risky action prepared for review",
+                "Đã chuẩn bị hành động rủi ro để kiểm duyệt",
             )
         ],
     }
@@ -364,7 +456,7 @@ def approval_node(state: AgentState) -> dict:
 
         resumed = interrupt(
             {
-                "question": "Approve this proposed support action?",
+                "question": "Phê duyệt hành động hỗ trợ được đề xuất này?",
                 "proposed_action": state.get("proposed_action", ""),
             }
         )
@@ -376,7 +468,7 @@ def approval_node(state: AgentState) -> dict:
         decision = ApprovalDecision(
             approved=True,
             reviewer="mock-reviewer",
-            comment="Automatically approved for deterministic lab execution.",
+            comment="Tự động phê duyệt để chạy lab theo cách xác định.",
         )
     return {
         "approval": decision.model_dump(),
@@ -404,7 +496,7 @@ def retry_or_fallback_node(state: AgentState) -> dict:
     Return: {"attempt": int, "errors": [str], "events": [make_event(...)]}
     """
     attempt = state.get("attempt", 0) + 1
-    error = f"Transient failure recorded; retry attempt {attempt}"
+    error = f"Đã ghi nhận lỗi tạm thời; lên lịch thử lại lần {attempt}"
     return {
         "attempt": attempt,
         "errors": [error],
@@ -422,13 +514,13 @@ def dead_letter_node(state: AgentState) -> dict:
     """
     attempt = state.get("attempt", 0)
     answer = (
-        f"The request could not be completed after {attempt} attempt(s). "
-        "It has been escalated for manual support review."
+        f"Không thể hoàn thành yêu cầu sau {attempt} lần thử. "
+        "Yêu cầu đã được chuyển sang hỗ trợ để kiểm tra thủ công."
     )
     return {
         "final_answer": answer,
-        "errors": ["Retry budget exhausted; request moved to dead letter."],
-        "events": [make_event("dead_letter", "failed", "retry budget exhausted")],
+        "errors": ["Đã hết số lần retry; yêu cầu được chuyển sang dead letter."],
+        "events": [make_event("dead_letter", "failed", "Đã hết số lần retry")],
     }
 
 
@@ -438,5 +530,5 @@ def finalize_node(state: AgentState) -> dict:
     Return: {"events": [make_event("finalize", "completed", "workflow finished")]}
     """
     return {
-        "events": [make_event("finalize", "completed", "workflow finished")],
+        "events": [make_event("finalize", "completed", "Workflow đã hoàn tất")],
     }

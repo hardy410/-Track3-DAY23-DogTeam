@@ -1,0 +1,103 @@
+{
+  "12345": {
+    "record_id": "ORD-12345-HN",
+    "order_id": "#12345",
+    "created_at": "22/08/2026 09:12",
+    "merchant": "Orbit Store Hà Nội",
+    "status": "Đang giao hàng",
+    "carrier": "Giao Hàng Nhanh",
+    "service_level": "Giao nhanh nội thành",
+    "origin": "Kho Long Biên, Hà Nội",
+    "destination": "Phường Dịch Vọng, Cầu Giấy, Hà Nội",
+    "current_location": "Bưu cục Cầu Giấy, Hà Nội",
+    "last_updated": "15:30 ngày 25/08/2026",
+    "estimated_delivery": "Trước 18:00 ngày 25/08/2026",
+    "package": "Một kiện hàng, khối lượng 0,8 kg",
+    "payment": "Đã thanh toán 450.000 đồng bằng thẻ Visa •••• 0410",
+    "delivery_attempts": 0,
+    "delivery_note": "Tài xế sẽ gọi người nhận trước khi giao",
+    "support_flags": [
+      "Không có yêu cầu đổi địa chỉ",
+      "Không có lần giao thất bại",
+      "Không thu thêm tiền khi nhận hàng"
+    ],
+    "tracking_history": [
+      "07:20 — Đơn hàng được tiếp nhận tại kho Long Biên",
+      "08:10 — Đơn hàng rời kho phân loại Hà Nội",
+      "12:45 — Đơn hàng đến bưu cục Cầu Giấy",
+      "15:30 — Nhân viên giao hàng đang trên đường giao"
+    ]
+  },
+  "67890": {
+    "record_id": "ORD-67890-HCM",
+    "order_id": "#67890",
+    "created_at": "20/08/2026 14:05",
+    "merchant": "Orbit Store TP.HCM",
+    "status": "Đã giao thành công",
+    "carrier": "Viettel Post",
+    "service_level": "Giao tiêu chuẩn",
+    "origin": "Kho Thủ Đức, TP.HCM",
+    "destination": "Phường Bến Thành, TP.HCM",
+    "current_location": "Đã giao tại địa chỉ người nhận",
+    "last_updated": "10:20 ngày 24/08/2026",
+    "estimated_delivery": "Đã hoàn tất lúc 10:20 ngày 24/08/2026",
+    "package": "Hai kiện hàng, tổng khối lượng 1,6 kg",
+    "payment": "Thanh toán khi nhận hàng 720.000 đồng — đã thu đủ",
+    "delivery_attempts": 1,
+    "delivery_note": "Người nhận đã xác nhận nhận đủ hàng",
+    "support_flags": ["Đơn đã hoàn tất", "Không có khiếu nại đang mở"],
+    "tracking_history": [
+      "21/08 16:00 — Đơn hàng rời kho Thủ Đức",
+      "24/08 08:15 — Bắt đầu giao hàng",
+      "24/08 10:20 — Giao hàng thành công"
+    ]
+  },
+  "24680": {
+    "record_id": "ORD-24680-DN",
+    "order_id": "#24680",
+    "created_at": "25/08/2026 11:40",
+    "merchant": "Orbit Store Đà Nẵng",
+    "status": "Đang chờ đơn vị vận chuyển lấy hàng",
+    "carrier": "J&T Express",
+    "service_level": "Giao tiêu chuẩn",
+    "origin": "Kho Hải Châu, Đà Nẵng",
+    "destination": "Quận Sơn Trà, Đà Nẵng",
+    "current_location": "Kho người bán tại Hải Châu",
+    "last_updated": "11:42 ngày 25/08/2026",
+    "estimated_delivery": "Từ ngày 27/08 đến 28/08/2026",
+    "package": "Một kiện hàng, khối lượng 0,4 kg",
+    "payment": "Đã thanh toán 280.000 đồng qua ví điện tử",
+    "delivery_attempts": 0,
+    "delivery_note": "Đơn vị vận chuyển dự kiến lấy hàng trong ngày",
+    "support_flags": ["Chưa bàn giao cho đơn vị vận chuyển"],
+    "tracking_history": [
+      "11:40 — Người bán xác nhận đơn hàng",
+      "11:42 — Đã tạo vận đơn J&T Express"
+    ]
+  },
+  "54321": {
+    "record_id": "ORD-54321-HP",
+    "order_id": "#54321",
+    "created_at": "18/08/2026 08:30",
+    "merchant": "Orbit Store Hải Phòng",
+    "status": "Đang hoàn về người bán",
+    "carrier": "Giao Hàng Tiết Kiệm",
+    "service_level": "Giao tiêu chuẩn",
+    "origin": "Kho Lê Chân, Hải Phòng",
+    "destination": "Quận Ngô Quyền, Hải Phòng",
+    "current_location": "Kho hoàn Lê Chân, Hải Phòng",
+    "last_updated": "09:05 ngày 25/08/2026",
+    "estimated_delivery": "Dự kiến hoàn về người bán ngày 26/08/2026",
+    "package": "Một kiện hàng, khối lượng 1,1 kg",
+    "payment": "Thanh toán khi nhận hàng 510.000 đồng — chưa thu",
+    "delivery_attempts": 3,
+    "delivery_note": "Không liên hệ được người nhận sau ba lần giao",
+    "support_flags": ["Đơn đang hoàn", "Cần nhân viên hỗ trợ nếu muốn giao lại"],
+    "tracking_history": [
+      "21/08 09:10 — Giao lần một không thành công",
+      "22/08 15:35 — Giao lần hai không thành công",
+      "24/08 17:20 — Giao lần ba không thành công",
+      "25/08 09:05 — Bắt đầu hoàn về người bán"
+    ]
+  }
+}

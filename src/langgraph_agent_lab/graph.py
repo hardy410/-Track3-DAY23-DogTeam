@@ -27,16 +27,18 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStat
                                           needs_retry → retry → [conditional: route_after_retry]
                                                                   tool (retry)
                                                                   dead_letter → finalize → END
-      missing_info → clarify → finalize → END
+                                          missing_info → clarify → wait_for_user → ...
+      missing_info → clarify → wait_for_user → classify (interactive conversation)
+                                          └──→ finalize → END (batch evaluation)
       risky        → risky_action → approval → [conditional: route_after_approval]
                                                   approved → tool → evaluate → ...
-                                                  rejected → clarify → finalize → END
+                                                  rejected → clarify → wait_for_user → ...
       error        → retry → [conditional: route_after_retry] → ...
 
     Steps:
     1. Import StateGraph, START, END from langgraph.graph
     2. Create StateGraph(AgentState)
-    3. Import and add all nodes from nodes.py (11 nodes total)
+    3. Import and add all nodes from nodes.py (12 nodes total)
     4. Import and use routing functions from routing.py for conditional edges
     5. Add fixed edges (e.g., START→intake, intake→classify, tool→evaluate, etc.)
     6. Add conditional edges using add_conditional_edges()
@@ -58,12 +60,14 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStat
         retry_or_fallback_node,
         risky_action_node,
         tool_node,
+        wait_for_user_node,
     )
     from .routing import (
         route_after_approval,
         route_after_classify,
         route_after_evaluate,
         route_after_retry,
+        route_after_user_input,
     )
 
     builder = StateGraph(AgentState)
@@ -73,6 +77,7 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStat
     builder.add_node("evaluate", evaluate_node)
     builder.add_node("answer", answer_node)
     builder.add_node("clarify", ask_clarification_node)
+    builder.add_node("wait_for_user", wait_for_user_node)
     builder.add_node("risky_action", risky_action_node)
     builder.add_node("approval", approval_node)
     builder.add_node("retry", retry_or_fallback_node)
@@ -96,7 +101,7 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStat
     builder.add_conditional_edges(
         "evaluate",
         route_after_evaluate,
-        {"answer": "answer", "retry": "retry"},
+        {"answer": "answer", "retry": "retry", "clarify": "clarify"},
     )
     builder.add_edge("risky_action", "approval")
     builder.add_conditional_edges(
@@ -110,7 +115,12 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStat
         {"tool": "tool", "dead_letter": "dead_letter"},
     )
     builder.add_edge("answer", "finalize")
-    builder.add_edge("clarify", "finalize")
+    builder.add_edge("clarify", "wait_for_user")
+    builder.add_conditional_edges(
+        "wait_for_user",
+        route_after_user_input,
+        {"classify": "classify", "finalize": "finalize"},
+    )
     builder.add_edge("dead_letter", "finalize")
     builder.add_edge("finalize", END)
     return builder.compile(checkpointer=checkpointer)

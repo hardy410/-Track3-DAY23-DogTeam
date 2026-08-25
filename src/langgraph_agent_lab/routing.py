@@ -39,10 +39,13 @@ def route_after_evaluate(state: AgentState) -> str:
     a key LangGraph advantage over linear LCEL chains.
 
     - If evaluation_result == "needs_retry" → "retry"
+    - If evaluation_result == "missing_info" → "clarify"
     - Otherwise → "answer"
     """
     if state.get("evaluation_result") == "needs_retry":
         return "retry"
+    if state.get("evaluation_result") == "missing_info":
+        return "clarify"
     return "answer"
 
 
@@ -67,3 +70,8 @@ def route_after_approval(state: AgentState) -> str:
     """
     approval = state.get("approval") or {}
     return "tool" if approval.get("approved", False) else "clarify"
+
+
+def route_after_user_input(state: AgentState) -> str:
+    """Re-classify after the user answered, or finish in non-interactive batch runs."""
+    return "classify" if state.get("clarification_received", False) else "finalize"

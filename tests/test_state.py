@@ -18,6 +18,7 @@ def test_initial_state_has_required_fields():
     assert "route" in state
     assert "attempt" in state
     assert "max_attempts" in state
+    assert state["should_retry"] is False
     assert "messages" in state
     assert "tool_results" in state
     assert "errors" in state

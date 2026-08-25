@@ -55,16 +55,17 @@ cp .env.example .env
 
 ## Understanding `scenarios.jsonl`
 
-The file `data/sample/scenarios.jsonl` contains **7 sample scenarios** your graph must handle:
+The file `data/sample/scenarios.jsonl` contains **8 sample scenarios** your graph must handle:
 
 ```jsonl
-{"id":"S01_simple",      "query":"How do I reset my password?",                          "expected_route":"simple"}
-{"id":"S02_tool",        "query":"Please lookup order status for order 12345",            "expected_route":"tool"}
-{"id":"S03_missing",     "query":"Can you fix it?",                                      "expected_route":"missing_info"}
-{"id":"S04_risky",       "query":"Refund this customer and send confirmation email",      "expected_route":"risky"}
-{"id":"S05_error",       "query":"Timeout failure while processing request",              "expected_route":"error"}
-{"id":"S06_delete",      "query":"Delete customer account after support verification",    "expected_route":"risky"}
-{"id":"S07_dead_letter", "query":"System failure cannot recover after multiple attempts", "expected_route":"error", "max_attempts":1}
+{"id":"S01_simple",      "query":"Mình quên mật khẩu rồi, giờ phải làm sao để đăng nhập lại?",          "expected_route":"simple"}
+{"id":"S02_tool",        "query":"Bạn xem giúp đơn hàng #12345 của mình đang giao tới đâu rồi nhé?",    "expected_route":"tool"}
+{"id":"S03_missing",     "query":"Đơn hàng của mình có vấn đề, bạn xử lý giúp mình được không?",        "expected_route":"missing_info"}
+{"id":"S04_risky",       "query":"Đơn #12345 bị giao nhầm hàng. Bạn hoàn lại 450.000 đồng vào thẻ...", "expected_route":"risky"}
+{"id":"S05_retry",       "query":"Bạn kiểm tra giúp đơn hàng #12345 đang được giao tới đâu...",         "expected_route":"tool", "should_retry":true}
+{"id":"S06_delete",      "query":"Sau khi xác minh, bạn xóa vĩnh viễn tài khoản của mình...",          "expected_route":"risky"}
+{"id":"S07_dead_letter", "query":"Mục hỗ trợ lần nào cũng báo dịch vụ unavailable...",                 "expected_route":"error", "max_attempts":1}
+{"id":"S08_tracking_clarification", "query":"Đơn mình đặt vẫn chưa thấy giao tới...",               "expected_route":"missing_info"}
 ```
 
 ### What each field means
@@ -75,7 +76,7 @@ The file `data/sample/scenarios.jsonl` contains **7 sample scenarios** your grap
 | `query` | The user's support-ticket text — input to your graph |
 | `expected_route` | Which route your `classify_node` should pick: `simple`, `tool`, `missing_info`, `risky`, or `error` |
 | `requires_approval` | If `true`, your graph must hit the approval/HITL node before answering |
-| `should_retry` | If `true`, scenario simulates transient tool failure requiring retry |
+| `should_retry` | If `true`, the mock tool itself times out before recovering; independent of user intent |
 | `max_attempts` | Override retry limit (default 3). S07 sets this to 1, so it exhausts retries immediately → dead letter |
 | `tags` | Descriptive labels for your reference |
 
@@ -170,7 +171,7 @@ make test  # some tests will fail until you implement TODOs
 
 4. **`routing.py`** — Implement all 4 routing functions from scratch
 5. **`graph.py`** — Build the complete StateGraph:
-   - Import and register all 11 nodes
+   - Import and register all 12 nodes (including the conversational `wait_for_user` node)
    - Wire fixed + conditional edges
    - All paths must terminate at finalize → END
 6. **Verify**: `make test` and `make run-scenarios`
@@ -214,15 +215,22 @@ Pick one or more:
 
 ## Live-demo UI
 
-The Streamlit dashboard exposes the completed lab as an interactive demo:
+The Streamlit app presents the completed lab as a chat-first agent product:
 
-- Run preset or custom support tickets and inspect the selected route.
-- Pause risky actions with a real LangGraph interrupt, then approve or reject and resume.
-- Inspect node events, latency, LLM calls, tool results, errors, state, and messages.
-- Watch the executed graph path highlight live and replay it step by step.
-- Read SQLite checkpoint history for the active thread.
-- Run all seven sample scenarios and download generated metrics/report artifacts.
-- Present the graph architecture, conditional routes, reducers, retry, and HITL paths.
+- Create and switch between multiple independent conversations without losing their runs.
+- Send custom messages or use story shortcuts that exercise every workflow branch.
+- Enter through a project-owned looping pixel-game video hero that works offline.
+- Watch an animated mission map advance through the real `graph.stream` node events.
+- Toggle the graph visualization without changing the running workflow or its checkpoints.
+- Focus on one current node decision at a time; open the trace drawer only when details are needed.
+- Inspect the full Graphviz graph, event table, tool results, and errors without cluttering the chat.
+- Continue vague requests naturally: `clarify → wait_for_user → classify` resumes the same run
+  after the customer replies instead of opening an unrelated request.
+- Open the highlighted graph, node journey, tool output, and errors inside every answer.
+- Pause risky actions with an inline approval card, then resume the exact saved checkpoint.
+- Replay the most recent graph step by step and inspect durable checkpoint history.
+- Run all eight sample scenarios and download generated metrics/report artifacts.
+- Present the graph architecture, conditional routes, retries, and HITL paths.
 
 ```bash
 conda activate langgraph-day23

@@ -9,6 +9,7 @@ from langgraph_agent_lab.routing import (
     route_after_classify,
     route_after_evaluate,
     route_after_retry,
+    route_after_user_input,
 )
 from langgraph_agent_lab.state import Route
 
@@ -65,3 +66,12 @@ def test_route_after_evaluate_success():
 
 def test_route_after_evaluate_retry():
     assert route_after_evaluate({"evaluation_result": "needs_retry"}) == "retry"
+
+
+def test_route_after_evaluate_missing_info():
+    assert route_after_evaluate({"evaluation_result": "missing_info"}) == "clarify"
+
+
+def test_route_after_user_input_reclassifies_conversation():
+    assert route_after_user_input({"clarification_received": True}) == "classify"
+    assert route_after_user_input({"clarification_received": False}) == "finalize"

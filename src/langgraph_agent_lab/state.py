@@ -52,9 +52,11 @@ class AgentState(TypedDict, total=False):
     risk_level: str
     attempt: int
     max_attempts: int
+    should_retry: bool
     final_answer: str | None
     evaluation_result: str
     pending_question: str | None
+    clarification_received: bool
     proposed_action: str | None
     approval: dict[str, Any] | None
     messages: Annotated[list[str], add]
@@ -90,9 +92,11 @@ def initial_state(scenario: Scenario) -> AgentState:
         "risk_level": "unknown",
         "attempt": 0,
         "max_attempts": scenario.max_attempts,
+        "should_retry": scenario.should_retry,
         "final_answer": None,
         "evaluation_result": "",
         "pending_question": None,
+        "clarification_received": False,
         "proposed_action": None,
         "approval": None,
         "messages": [],

@@ -85,10 +85,13 @@ flowchart TD
     approval -->|rejected| clarify
     evaluate -->|success| answer
     evaluate -->|needs retry| retry
+    evaluate -->|missing info| clarify
     retry -->|within budget| tool
     retry -->|exhausted| dead_letter
     answer --> finalize
-    clarify --> finalize
+    clarify --> wait_for_user
+    wait_for_user -->|customer replied| classify
+    wait_for_user -->|batch mode| finalize
     dead_letter --> finalize --> END
 ```
 
