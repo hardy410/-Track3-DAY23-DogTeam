@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from html import escape
 from pathlib import Path
 from time import sleep
 from typing import cast
@@ -147,22 +148,43 @@ def _apply_theme() -> None:
     st.markdown(
         """
         <style>
-        .block-container {padding-top: 1.4rem; padding-bottom: 3rem; max-width: 1450px;}
+        :root {--ink:#17211b; --muted:#66736a; --line:#dfe7df; --mint:#dff6df;
+               --lime:#d9f99d; --cream:#f7f4ec; --forest:#214e34; --coral:#ff7657;}
+        .stApp {background:#f7f7f2; color:var(--ink);}
+        .block-container {padding-top:1rem; padding-bottom:3rem; max-width:1580px;}
+        [data-testid="stSidebar"] {background:#eef1e9; border-right:1px solid var(--line);}
         [data-testid="stMetric"] {
-            background: linear-gradient(135deg, #ffffff 0%, #f7f9ff 100%);
-            border: 1px solid #e4e7ec; border-radius: 14px; padding: 12px 16px;
-            box-shadow: 0 3px 12px rgba(16,24,40,.05);
+            background:#fff; border:1px solid var(--line); border-radius:16px;
+            padding:12px 16px; box-shadow:0 3px 12px rgba(31,55,40,.04);
         }
         .hero {
-            padding: 22px 26px; border-radius: 18px; margin-bottom: 18px;
-            background: linear-gradient(120deg, #182230 0%, #3448c5 65%, #6172f3 100%);
-            color: white; box-shadow: 0 12px 30px rgba(52,72,197,.22);
+            padding:26px 30px; border-radius:24px; margin-bottom:16px;
+            background:radial-gradient(circle at 80% 0%, #d9f99d 0, transparent 28%),
+                       linear-gradient(120deg, #173e2a 0%, #295a3d 100%);
+            color:white; box-shadow:0 14px 34px rgba(33,78,52,.18);
         }
-        .hero h1 {margin: 0 0 5px 0; font-size: 2rem; color: white;}
-        .hero p {margin: 0; opacity: .86;}
+        .hero h1 {margin:0 0 7px; font-size:2.15rem; color:white; letter-spacing:-.03em;}
+        .hero p {margin:0; opacity:.82;}
+        .eyebrow {font-size:.72rem; text-transform:uppercase; letter-spacing:.14em;
+                  font-weight:800; color:#b9e8b8; margin-bottom:8px;}
         .pill {display:inline-block; padding:4px 10px; border-radius:999px;
-               background:#eef4ff; color:#3538cd; font-weight:600; margin-right:6px;}
+               background:#eaf5e8; color:#214e34; font-weight:700; margin-right:6px;}
         .trace-title {font-weight:700; color:#344054; margin-top:8px;}
+        .panel-title {font-size:.72rem; text-transform:uppercase; letter-spacing:.12em;
+                      color:#758078; font-weight:800; margin:4px 0 10px;}
+        .request-card {background:#fff; border:1px solid var(--line); border-radius:18px;
+                       padding:14px 16px; margin:0 0 10px;}
+        .request-card strong {color:var(--forest);}
+        .journey-step {border-left:2px solid #cbd7cd; padding:2px 0 13px 14px;
+                       color:#66736a; font-size:.86rem;}
+        .journey-step.active {border-color:#55a76a; color:#173e2a; font-weight:700;}
+        .journey-step.error {border-color:#ef6a55; color:#a33b2c;}
+        .journey-dot {display:inline-block; width:8px; height:8px; border-radius:50%;
+                      background:#55a76a; margin-right:7px;}
+        div[data-testid="stGraphVizChart"] {background:#fff; border:1px solid var(--line);
+                                             border-radius:20px; padding:12px;}
+        .stButton > button {border-radius:999px; font-weight:700;}
+        div[data-testid="stTabs"] button {font-weight:700;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -303,6 +325,55 @@ def _path_caption(path: list[str], upto_step: int | None = None) -> str:
     return " → ".join(path[: final_step + 1])
 
 
+def _render_journey(state: AgentState) -> None:
+    """Render a compact, human-readable journey for the selected request."""
+    for index, event in enumerate(state.get("events", []), start=1):
+        node = str(event.get("node", "unknown"))
+        tone = "error" if node in {"retry", "dead_letter"} else "active"
+        label = node.replace("_", " ").title()
+        message = str(event.get("message", ""))
+        st.markdown(
+            f'<div class="journey-step {tone}"><span class="journey-dot"></span>'
+            f"<strong>{index:02d} · {label}</strong><br>{message}</div>",
+            unsafe_allow_html=True,
+        )
+    if _has_interrupt(state):
+        st.markdown(
+            '<div class="journey-step active"><span class="journey-dot"></span>'
+            "<strong>Waiting for approval</strong><br>The graph is safely paused.</div>",
+            unsafe_allow_html=True,
+        )
+
+
+def _remember_run(state: AgentState, expected_route: str) -> None:
+    """Keep recent requests selectable so every run retains its own graph."""
+    runs = cast(list[dict[str, object]], st.session_state.setdefault("recent_runs", []))
+    thread_id = str(state.get("thread_id", "unknown"))
+    entry: dict[str, object] = {
+        "thread_id": thread_id,
+        "state": state,
+        "expected_route": expected_route,
+    }
+    runs[:] = [item for item in runs if item.get("thread_id") != thread_id]
+    runs.insert(0, entry)
+    del runs[8:]
+
+
+def _select_visible_run(default_state: AgentState, default_route: str) -> tuple[AgentState, str]:
+    """Let presenters switch between recent request-specific visualizations."""
+    runs = cast(list[dict[str, object]], st.session_state.get("recent_runs", []))
+    if len(runs) < 2:
+        return default_state, default_route
+    labels = [
+        f"{str(cast(AgentState, item['state']).get('scenario_id', 'request'))} · "
+        f"{str(cast(AgentState, item['state']).get('route', 'pending')) or 'pending'}"
+        for item in runs
+    ]
+    selected = st.selectbox("Recent requests", range(len(runs)), format_func=labels.__getitem__)
+    item = runs[selected]
+    return cast(AgentState, item["state"]), str(item["expected_route"])
+
+
 def _render_result(state: AgentState, expected_route: str) -> None:
     metric = metric_from_state(
         cast(dict[str, object], state),
@@ -312,9 +383,29 @@ def _render_result(state: AgentState, expected_route: str) -> None:
     events = state.get("events", [])
     total_latency = sum(int(event.get("latency_ms", 0) or 0) for event in events)
 
-    st.subheader("Live workflow map")
-    st.graphviz_chart(_dynamic_graph_dot(state), width="stretch")
-    st.caption(f"Executed path: {_path_caption(_execution_path(state))}")
+    st.markdown('<div class="panel-title">Request workspace</div>', unsafe_allow_html=True)
+    scenario_label = escape(str(state.get("scenario_id", "Live request")))
+    query_label = escape(str(state.get("query", "")))
+    st.markdown(
+        f'<div class="request-card"><strong>{scenario_label}</strong>'
+        f"<br><span>{query_label}</span></div>",
+        unsafe_allow_html=True,
+    )
+
+    journey_col, graph_col, inspector_col = st.columns([0.85, 2.25, 1.05], gap="medium")
+    with journey_col:
+        st.markdown('<div class="panel-title">Journey</div>', unsafe_allow_html=True)
+        _render_journey(state)
+    with graph_col:
+        st.markdown('<div class="panel-title">Live graph</div>', unsafe_allow_html=True)
+        st.graphviz_chart(_dynamic_graph_dot(state), width="stretch")
+        st.caption(f"Executed path · {_path_caption(_execution_path(state))}")
+    with inspector_col:
+        st.markdown('<div class="panel-title">Run inspector</div>', unsafe_allow_html=True)
+        st.metric("Status", "Waiting for human" if _has_interrupt(state) else "Completed")
+        st.metric("Route", state.get("route", "pending") or "pending")
+        st.metric("Attempts", state.get("attempt", 0))
+        st.metric("Thread", str(state.get("thread_id", "unknown"))[-12:])
 
     cols = st.columns(6)
     cols[0].metric("Actual route", state.get("route", "pending") or "pending")
@@ -340,8 +431,8 @@ def _render_result(state: AgentState, expected_route: str) -> None:
         st.subheader("Proposed risky action")
         st.warning(state["proposed_action"])
 
-    st.subheader("Execution trace")
-    st.dataframe(_event_rows(state), width="stretch", hide_index=True)
+    with st.expander("Open node-by-node execution trace", expanded=False):
+        st.dataframe(_event_rows(state), width="stretch", hide_index=True)
 
     detail_tabs = st.tabs(["Tool results", "Errors", "State JSON", "Messages"])
     with detail_tabs[0]:
@@ -378,6 +469,7 @@ def _render_pending_approval() -> None:
     with st.spinner("Resuming checkpointed workflow..."):
         result = _invoke(graph, Command(resume=decision), config, real_hitl=True)
     st.session_state["last_result"] = result
+    _remember_run(result, str(st.session_state.get("last_expected_route", Route.RISKY.value)))
     st.session_state.pop("pending_graph", None)
     st.session_state.pop("pending_config", None)
     st.rerun()
@@ -443,13 +535,15 @@ def _run_single_demo(checkpointer_kind: str) -> None:
             else:
                 st.session_state.pop("pending_graph", None)
                 st.session_state.pop("pending_config", None)
+            _remember_run(result, expected_route)
 
     _render_pending_approval()
     if "last_result" in st.session_state:
-        _render_result(
+        visible_state, visible_route = _select_visible_run(
             cast(AgentState, st.session_state["last_result"]),
             str(st.session_state.get("last_expected_route", expected_route)),
         )
+        _render_result(visible_state, visible_route)
 
 
 def _run_scenario_suite(checkpointer_kind: str) -> None:
@@ -634,6 +728,7 @@ def main() -> None:
     st.markdown(
         """
         <div class="hero">
+          <div class="eyebrow">Agent operations studio</div>
           <h1>LangGraph Support Agent Lab</h1>
           <p>Conditional routing · retry loops · HITL · persistence · metrics · tracing</p>
         </div>
